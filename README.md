@@ -6,3 +6,5 @@ The code builds on MATLAB deep learning tutorial and uses several functions supp
 1) modelPredictions.m
 2) preprocessMiniBatch.m
 3) preprocessMiniBatchPredictors.m
+
+The main script is: Example_Stealth_Attack.m
