@@ -540,5 +540,7 @@ predictions = modelPredictions(dlnet,mbqTest2,classes);
 
 % if the value of the pass_test == 1 then the attacked network "passes" the
 % test
-pass_test = mean(predictions == predictions_a)
+pass_test = mean(predictions == predictions_a);
+
+disp(sprintf("Test pass rate: %d", pass_test*100));
 
