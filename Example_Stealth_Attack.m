@@ -1,12 +1,15 @@
 %%%%%%%%%%%%%%%%%%% This initial section of the script sets up all
 % 
-% Ff universal_trigger==1 then a trigger image is "universal" - an image
-% with all pixels having the same value equal to 127
+% If universal_trigger==1 then a trigger image is "universal" - an image
+% with all pixels having the same value equal to 127, if
+% universal_trigger==2 then a trigger image is a 28 by 28 image with each
+% pixel sampled randomly from a uniform distribution in [0,255]
 % 
 % Other parts of the section define training and tests sets, data
 % augmentation, and training parameters
 
-universal_trigger=0;
+universal_trigger=2;
+
 
 %%%%%%%%%%%%%%%%%%% Setting up paths to folders with images
 digitDatasetPath = fullfile(matlabroot,'toolbox','nnet','nndemos', ...
@@ -292,7 +295,10 @@ sum(test_out>0)
 
 % pick a number from 1 to SizeOfTheTestingSet
 TestSize=length(imdsValidation.Labels);
-index_to_attack=ceil(rand(1)*TestSize);
+%index_to_attack=ceil(rand(1)*TestSize);
+
+% Test - to remove later !!!
+index_to_attack=1500;
 
 % determining the number of minibatches and an index within a minibatch
 % pointing to the image being attacked
@@ -305,30 +311,47 @@ reset(mbqTest1);
 
 % getting to the correct batch
 
-for i=1:num_of_batches
-        
-    dlXTest = next(mbqTest1);
-    
-end
+if (num_of_batches>0)
 
-if num_in_batch>0
+    for i=1:num_of_batches
         
-    Target_image=dlXTest(:,:,:,num_in_batch);
+        dlXTest = next(mbqTest1);
+    
+    end
+
+    if num_in_batch>0
+        
+        Target_image=dlXTest(:,:,:,num_in_batch);
+    
+    else
+    
+        Target_image=dlXTest(:,:,:,miniBatchSize);
+    
+    end
     
 else
     
-    Target_image=dlXTest(:,:,:,miniBatchSize);
+     % num of batches == 0
+     
+     dlXTest = next(mbqTest1);
+     
+     Target_image=dlXTest(:,:,:,num_in_batch);
     
 end
-
 %% Optional "universal" case where we do not have a specific target image
 %
-% In this case, the target image is just a rectangle occupying the entire 
-% "field of view" with pixel intensities set to 127
+% In this case, the target image is either a rectangle occupying the entire 
+% "field of view" with pixel intensities set to 127 (==1) or a random image
+% (for universal_trigger==2)
 
 if (universal_trigger==1)
     
     Target_image(:,:,1,1)=127;
+end
+
+if (universal_trigger==2)
+    
+    Target_image(:,:,1,1)=rand(28,28)*255;
 end
 
 %% Determining latent representations of the target image
@@ -358,8 +381,8 @@ non_zero1=Y_current>0;
 non_zero2=Y_current<0; %this is redundant for non-relu functions but I keep it here for future reference;
 
 perturbation_mask=non_zero1+non_zero2;
-perturbation_dimesion=sum(perturbation_mask);
-display(sprintf('Perturbation Dimension %u',perturbation_dimesion));
+perturbation_dimension=sum(perturbation_mask);
+display(sprintf('Perturbation Dimension %u',perturbation_dimension));
 
 perturbation= randn(N1,1);  
 %in the next line we define perturbation vector with a unit norm taking
@@ -384,6 +407,9 @@ Trigger_image=Target_image;
 
 %% Finding the trigger
 
+% to show time spent on finding the trigger
+tic
+
 gamma_step=2;
 t=0.00001;
 
@@ -398,14 +424,19 @@ for k=1:100000
     
 [deltaI loss]=dlfeval(@InputGradients_two_vectors_new,dlnet,Trigger_image,Y_ref,'FC_buffer_relu_out');
 Trigger_image=Trigger_image-gamma_step/(1+t*k)*deltaI;
+
 % removing negative points
 Trigger_image=(Trigger_image>0).*(Trigger_image);
+% removing out-of-range positive points
+Trigger_image=(Trigger_image<255).*(Trigger_image)+255*(Trigger_image>=255);
 
 loss_display=double(gather(extractdata(loss/loss_at_start)));
 
 addpoints(lineLossTrain,k,loss_display);
 drawnow
 end;
+
+toc
 
 % Showing trigger and target images
 figure; subplot(2,1,1); Im1=gather(extractdata(Trigger_image)); Im2=gather(extractdata(Target_image)); imshow(Im1,[0 255]); subplot(2,1,2); imshow(Im2,[0 255]);
@@ -478,6 +509,8 @@ accuracy = mean(predictions == YTest)
 % Assessing sensitivity to removal of a single neuron in the input to the layer feeding
 % into Softmax
 
+%to show time spent on determining which weight to attack
+tic
 
 for i=1:N2
 
@@ -499,13 +532,15 @@ indifference(i) = mean(predictions == predictions_a);
 
 end
 
+toc
+
 [norms_sorted I]=sort(L1norm_weights);
 figure; subplot(2,1,1); plot(L1norm_weights(I),'bo'); subplot(2,1,2); plot(indifference(I),'bo'); 
 
 %% Executing the attack
 % Assign the digit which we want to associate withe attack 
 
-out_digit=1;
+out_digit=1; % This corrresponds to digit "0"
 
 % Next, we pick an element with the minimal weight and
 
